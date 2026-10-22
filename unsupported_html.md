@@ -335,6 +335,72 @@ line.
 | `<br>` starting a heading | `<h1><br><em>b</em></h1>`  | `#␣<br>*b*`         |
 | `<br>` ending a heading   | `<h1><em>a</em><br></h1>`  | `#␣*a*<br>`         |
 
+### Heading attributes
+
+pulldown-cmark's
+[heading attributes](https://pulldown-cmark.github.io/pulldown-cmark/specs/heading_attrs.html)
+extension ends a heading with an attribute block: `# a {#x .y z=1}` reads back
+as `<h1 id="x" class="y" z="1">a</h1>`. The translation assumes its reader
+enables heading attributes (`Options::ENABLE_HEADING_ATTRIBUTES`), and no option
+disables it.
+
+The block's contents are split on ASCII whitespace as Rust's
+[`str::split_ascii_whitespace`](https://doc.rust-lang.org/std/primitive.str.html#method.split_ascii_whitespace)
+defines it, which, unlike the whitespace of the math section, excludes a
+vertical tab. They may not contain `{`, `}`, `<`, `>`, or `\`; since no escape
+or character reference is decoded there, these characters cannot be encoded.
+Attributes are written as follows:
+
+* An `id` is written `#value` and each `class` token `.token`. pulldown-cmark
+  ignores a bare `#` or `.`, so an empty `id` or a `class` with no tokens cannot
+  be written.
+* Any other attribute is written `name=value`, or `name=` when its value is
+  empty, since pulldown-cmark
+  [ignores a one-character token](https://github.com/pulldown-cmark/pulldown-cmark/blob/v0.13.4/pulldown-cmark/src/firstpass.rs#L2548)
+  such as the bare `x` of `<h1 x>`. A name may not begin with `#` or `.` or
+  contain `=`.
+* No name or value may contain one of the five characters above, and no value
+  may contain whitespace. A `class` is written whole or not at all.
+
+pulldown-cmark writes the ID, then the classes, then the other attributes, and
+separates class tokens with single spaces; attribute order and `class`
+whitespace, which carry no meaning in HTML, are lost.
+
+In Faithful mode, a heading with any attribute that cannot be written is
+serialized whole as an HTML block, as with tables. Pure mode drops those
+attributes and writes the rest.
+
+When no block is written, a `}` ending the heading's content is escaped as `\}`,
+so `<h1>Price {USD}</h1>` does not read back as `<h1 USD="">Price</h1>`. Like
+the `\$` of the math section, this is an ordinary CommonMark escape. When a
+block is written, pulldown-cmark reads only the last block on the line, so no
+escape is needed.
+
+A block does not change the setext fallbacks in the headings section; a setext
+underline spans the whole line, block included.
+
+**Special case**: pulldown-cmark removes the block before looking for an ATX
+[closing sequence](https://spec.commonmark.org/0.31.2/#atx-headings), so
+`# a # {#x}` reads back as `<h1 id="x">a</h1>`. Until the headings section
+handles closing sequences, the translation of an ATX heading whose content ends
+in one is unspecified.
+
+The rows use ATX `<h1>`, except the setext row, which uses
+`HeadingStyle::Setex`.
+
+| Description                   | HTML in                                  | Faithful expected        |
+| ----------------------------- | ---------------------------------------- | ------------------------ |
+| ID                            | `<h1 id="x">a</h1>`                      | `#␣a␣{#x}`               |
+| Classes with extra whitespace | `<h1 class="␣b␣␣a␣">a</h1>`              | `#␣a␣{.b␣.a}`            |
+| Attributes reordered          | `<h1 data-x="1" class="b" id="i">a</h1>` | `#␣a␣{#i␣.b␣data-x=1}`   |
+| Valueless attribute           | `<h1 hidden>a</h1>`                      | `#␣a␣{hidden=}`          |
+| Empty heading                 | `<h1 id="x"></h1>`                       | `#␣{#x}`                 |
+| Setext heading                | `<h1 id="x">a</h1>`                      | `a␣{#x}⏎======`          |
+| Whitespace in a value         | `<h1 title="a␣b">a</h1>`                 | `<h1 title="a␣b">a</h1>` |
+| Empty ID                      | `<h1 id="">a</h1>`                       | `<h1 id="">a</h1>`       |
+| Text ending in `}`            | `<h1>Price {USD}</h1>`                   | `#␣Price␣{USD\}`         |
+
+
 Paragraphs
 ----------
 
